@@ -6,7 +6,7 @@
 #include <string.h>
 #include "../headers/queue.h"
 
-#define HAIRCUT_TIME 3 * 1000000 // 3 seconds
+#define HAIRCUT_TIME 3 * 1000000 // 3 sekundy
 
 typedef struct
 {
@@ -20,34 +20,60 @@ typedef struct
 
 BarberShop shop;
 Queue queue;
-int infoMode = 0;		// Flag for -info mode
-int barberSleeping = 0; // Flag to indicate if barber is sleeping
+int infoMode = 0;		// Flaga dla trybu -info
+int barberSleeping = 0; // Flaga wskazująca, czy fryzjer śpi
 
 void initializeBarberShop(BarberShop *shop, int capacity)
 {
 	shop->waitingRoomCapacity = capacity;
 	shop->nextSeat = 0;
 	shop->rejections = 0;
-	pthread_mutex_init(&shop->mutex, NULL);
-	pthread_cond_init(&shop->barberReady, NULL);
-	pthread_cond_init(&shop->clientReady, NULL);
+	if (pthread_mutex_init(&shop->mutex, NULL) != 0)
+	{
+		perror("Inicjalizacja mutexa nie powiodła się");
+		exit(EXIT_FAILURE);
+	}
+	if (pthread_cond_init(&shop->barberReady, NULL) != 0)
+	{
+		perror("Inicjalizacja zmiennej warunkowej barberReady nie powiodła się");
+		exit(EXIT_FAILURE);
+	}
+	if (pthread_cond_init(&shop->clientReady, NULL) != 0)
+	{
+		perror("Inicjalizacja zmiennej warunkowej clientReady nie powiodła się");
+		exit(EXIT_FAILURE);
+	}
 	initializeQueue(&queue, capacity);
 }
 
 void cleanupBarberShop(BarberShop *shop)
 {
-	pthread_mutex_destroy(&shop->mutex);
-	pthread_cond_destroy(&shop->barberReady);
-	pthread_cond_destroy(&shop->clientReady);
+	if (pthread_mutex_destroy(&shop->mutex) != 0)
+	{
+		perror("Niszczenie mutexa nie powiodło się");
+	}
+	if (pthread_cond_destroy(&shop->barberReady) != 0)
+	{
+		perror("Niszczenie zmiennej warunkowej barberReady nie powiodło się");
+	}
+	if (pthread_cond_destroy(&shop->clientReady) != 0)
+	{
+		perror("Niszczenie zmiennej warunkowej clientReady nie powiodło się");
+	}
+
 	cleanupQueue(&queue);
 }
 
 void *client(void *arg)
 {
 	int id = *(int *)arg;
-	usleep(rand() % (HAIRCUT_TIME * 3)); // Random arrival time
+	usleep(rand() % (HAIRCUT_TIME * 3)); // Losowy czas przybycia
 
-	pthread_mutex_lock(&shop.mutex);
+	if (pthread_mutex_lock(&shop.mutex) != 0)
+	{
+		perror("Błąd przy blokowaniu mutexa");
+		pthread_exit(NULL);
+	}
 
 	if (queue.size < shop.waitingRoomCapacity)
 	{
@@ -56,21 +82,43 @@ void *client(void *arg)
 		{
 			printf("Klient %d wchodzi do poczekalni.\n", id);
 		}
-		pthread_cond_signal(&shop.clientReady);
-		pthread_cond_wait(&shop.barberReady, &shop.mutex);
+		if (pthread_cond_signal(&shop.clientReady) != 0)
+		{
+			perror("Błąd przy wysyłaniu sygnału clientReady");
+			pthread_mutex_unlock(&shop.mutex);
+			pthread_exit(NULL);
+		}
+		if (pthread_cond_wait(&shop.barberReady, &shop.mutex) != 0)
+		{
+			perror("Błąd przy oczekiwaniu na sygnał barberReady");
+			pthread_mutex_unlock(&shop.mutex);
+			pthread_exit(NULL);
+		}
 
-		pthread_mutex_unlock(&shop.mutex);
+		if (pthread_mutex_unlock(&shop.mutex) != 0)
+		{
+			perror("Błąd przy odblokowywaniu mutexa");
+			pthread_exit(NULL);
+		}
 
-		pthread_mutex_lock(&shop.mutex);
+		if (pthread_mutex_lock(&shop.mutex) != 0)
+		{
+			perror("Błąd przy blokowaniu mutexa");
+			pthread_exit(NULL);
+		}
 		printf("Rezygnacja:%d Poczekalnia: %d/%d [Fotel: %d]\n", shop.rejections, queue.size, shop.waitingRoomCapacity, id);
 		if (infoMode)
 		{
 			displayQueue(&queue);
 		}
 
-		pthread_mutex_unlock(&shop.mutex);
+		if (pthread_mutex_unlock(&shop.mutex) != 0)
+		{
+			perror("Błąd przy odblokowywaniu mutexa");
+			pthread_exit(NULL);
+		}
 
-		usleep(HAIRCUT_TIME); // Haircut time
+		usleep(HAIRCUT_TIME); // Czas strzyżenia
 	}
 	else
 	{
@@ -79,7 +127,11 @@ void *client(void *arg)
 		{
 			printf("Klient %d odchodzi, brak miejsc w poczekalni.\n", id);
 		}
-		pthread_mutex_unlock(&shop.mutex);
+		if (pthread_mutex_unlock(&shop.mutex) != 0)
+		{
+			perror("Błąd przy odblokowywaniu mutexa");
+			pthread_exit(NULL);
+		}
 	}
 	return NULL;
 }
@@ -88,7 +140,11 @@ void *barber(void *arg)
 {
 	while (1)
 	{
-		pthread_mutex_lock(&shop.mutex);
+		if (pthread_mutex_lock(&shop.mutex) != 0)
+		{
+			perror("Błąd przy blokowaniu mutexa");
+			pthread_exit(NULL);
+		}
 
 		while (queue.size == 0)
 		{
@@ -97,7 +153,12 @@ void *barber(void *arg)
 				printf("Fryzjer śpi.\n");
 				barberSleeping = 1;
 			}
-			pthread_cond_wait(&shop.clientReady, &shop.mutex);
+			if (pthread_cond_wait(&shop.clientReady, &shop.mutex) != 0)
+			{
+				perror("Błąd przy oczekiwaniu na sygnał clientReady");
+				pthread_mutex_unlock(&shop.mutex);
+				pthread_exit(NULL);
+			}
 		}
 
 		if (barberSleeping)
@@ -106,14 +167,37 @@ void *barber(void *arg)
 			barberSleeping = 0;
 		}
 		int clientID = dequeue(&queue);
-		pthread_cond_signal(&shop.barberReady);
-		pthread_mutex_unlock(&shop.mutex);
+		if (clientID == -1)
+		{
+			perror("Błąd przy zdejmowaniu klienta z kolejki");
+			pthread_mutex_unlock(&shop.mutex);
+			pthread_exit(NULL);
+		}
+		if (pthread_cond_signal(&shop.barberReady) != 0)
+		{
+			perror("Błąd przy wysyłaniu sygnału barberReady");
+			pthread_mutex_unlock(&shop.mutex);
+			pthread_exit(NULL);
+		}
+		if (pthread_mutex_unlock(&shop.mutex) != 0)
+		{
+			perror("Błąd przy odblokowywaniu mutexa");
+			pthread_exit(NULL);
+		}
 
-		pthread_mutex_lock(&shop.mutex);
+		if (pthread_mutex_lock(&shop.mutex) != 0)
+		{
+			perror("Błąd przy blokowaniu mutexa");
+			pthread_exit(NULL);
+		}
 		printf("Fryzjer obsługuje klienta %d\n", clientID);
-		pthread_mutex_unlock(&shop.mutex);
+		if (pthread_mutex_unlock(&shop.mutex) != 0)
+		{
+			perror("Błąd przy odblokowywaniu mutexa");
+			pthread_exit(NULL);
+		}
 
-		usleep(HAIRCUT_TIME); // Haircut time
+		usleep(HAIRCUT_TIME); // Czas strzyżenia
 	}
 	return NULL;
 }
@@ -122,7 +206,7 @@ int main(int argc, char *argv[])
 {
 	if (argc < 3)
 	{
-		fprintf(stderr, "Usage: %s <num_clients> <num_seats> [-info]\n", argv[0]);
+		fprintf(stderr, "Użycie: %s <liczba_klientów> <liczba_miejsc> [-info]\n", argv[0]);
 		return 1;
 	}
 
@@ -141,21 +225,40 @@ int main(int argc, char *argv[])
 
 	srand(time(NULL));
 
-	pthread_create(&barberThread, NULL, barber, NULL);
+	if (pthread_create(&barberThread, NULL, barber, NULL) != 0)
+	{
+		perror("Błąd przy tworzeniu wątku fryzjera");
+		cleanupBarberShop(&shop);
+		exit(EXIT_FAILURE);
+	}
 
 	for (int i = 0; i < numClients; ++i)
 	{
 		clientIDs[i] = i + 1;
-		pthread_create(&clientThreads[i], NULL, client, &clientIDs[i]);
+		if (pthread_create(&clientThreads[i], NULL, client, &clientIDs[i]) != 0)
+		{
+			perror("Błąd przy tworzeniu wątku klienta");
+			cleanupBarberShop(&shop);
+			exit(EXIT_FAILURE);
+		}
 	}
 
 	for (int i = 0; i < numClients; ++i)
 	{
-		pthread_join(clientThreads[i], NULL);
+		if (pthread_join(clientThreads[i], NULL) != 0)
+		{
+			perror("Błąd przy oczekiwaniu na zakończenie wątku klienta");
+		}
 	}
 
-	pthread_cancel(barberThread);
-	pthread_join(barberThread, NULL);
+	if (pthread_cancel(barberThread) != 0)
+	{
+		perror("Błąd przy anulowaniu wątku fryzjera");
+	}
+	if (pthread_join(barberThread, NULL) != 0)
+	{
+		perror("Błąd przy oczekiwaniu na zakończenie wątku fryzjera");
+	}
 
 	cleanupBarberShop(&shop);
 
