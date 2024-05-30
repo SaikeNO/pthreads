@@ -1,59 +1,56 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <pthread.h>
+#include <semaphore.h>
 #include <unistd.h>
 #include <time.h>
 #include <string.h>
 
-#define HAIRCUT_TIME 3 // seconds
+#define HAIRCUT_TIME 3 * 1000000 // 3 seconds
 
-// Data structure for the barber shop
 typedef struct
 {
     int waitingRoomCapacity;
     int *waitingRoom;
     int nextSeat;
-    int nextClient;
     int rejections;
     pthread_mutex_t mutex;
-    pthread_cond_t barberReady;
-    pthread_cond_t clientReady;
+    sem_t barberReady;
+    sem_t clientReady;
+    sem_t accessSeats;
 } BarberShop;
 
-// Global variables
 BarberShop shop;
 int infoMode = 0;       // Flag for -info mode
 int barberSleeping = 0; // Flag to indicate if barber is sleeping
 
-// Function to initialize the barber shop
 void initializeBarberShop(BarberShop *shop, int capacity)
 {
     shop->waitingRoomCapacity = capacity;
     shop->waitingRoom = (int *)malloc(capacity * sizeof(int));
     shop->nextSeat = 0;
-    shop->nextClient = 0;
     shop->rejections = 0;
     pthread_mutex_init(&shop->mutex, NULL);
-    pthread_cond_init(&shop->barberReady, NULL);
-    pthread_cond_init(&shop->clientReady, NULL);
+    sem_init(&shop->barberReady, 0, 0);
+    sem_init(&shop->clientReady, 0, 0);
+    sem_init(&shop->accessSeats, 0, 1);
 }
 
-// Function to clean up the barber shop
 void cleanupBarberShop(BarberShop *shop)
 {
     free(shop->waitingRoom);
     pthread_mutex_destroy(&shop->mutex);
-    pthread_cond_destroy(&shop->barberReady);
-    pthread_cond_destroy(&shop->clientReady);
+    sem_destroy(&shop->barberReady);
+    sem_destroy(&shop->clientReady);
+    sem_destroy(&shop->accessSeats);
 }
 
-// Client thread function
 void *client(void *arg)
 {
     int id = *(int *)arg;
-    usleep(rand() % (HAIRCUT_TIME * 30 * 1000000)); // Random arrival time from 0 to 3 times the haircut time
+    usleep(rand() % (HAIRCUT_TIME * 3)); // Random arrival time
 
-    pthread_mutex_lock(&shop.mutex);
+    sem_wait(&shop.accessSeats);
 
     if (shop.nextSeat < shop.waitingRoomCapacity)
     {
@@ -62,17 +59,15 @@ void *client(void *arg)
         {
             printf("Klient %d wchodzi do poczekalni.\n", id);
         }
-        pthread_cond_signal(&shop.clientReady);
-        pthread_cond_wait(&shop.barberReady, &shop.mutex);
-
-        pthread_mutex_unlock(&shop.mutex);
+        sem_post(&shop.clientReady);
+        sem_post(&shop.accessSeats);
+        sem_wait(&shop.barberReady);
 
         pthread_mutex_lock(&shop.mutex);
-        printf("Strzyżenie: %d Poczekalnia: %d/%d [Fotel: %d]\n",
-               shop.rejections, shop.nextSeat, shop.waitingRoomCapacity, id);
+        printf("Rezygnacja:%d Poczekalnia: %d/%d [Fotel: %d]\n", shop.rejections, shop.nextSeat, shop.waitingRoomCapacity, id);
         pthread_mutex_unlock(&shop.mutex);
 
-        usleep(HAIRCUT_TIME * 1000000); // Haircut time
+        usleep(HAIRCUT_TIME); // Haircut time
     }
     else
     {
@@ -81,42 +76,45 @@ void *client(void *arg)
         {
             printf("Klient %d odchodzi, brak miejsc w poczekalni.\n", id);
         }
-        pthread_mutex_unlock(&shop.mutex);
+        sem_post(&shop.accessSeats);
     }
     return NULL;
 }
 
-// Barber thread function
 void *barber(void *arg)
 {
     while (1)
     {
         pthread_mutex_lock(&shop.mutex);
 
-        while (shop.nextSeat == 0)
+        if (shop.nextSeat == 0 && infoMode)
         {
             if (!barberSleeping)
             {
                 printf("Fryzjer śpi.\n");
                 barberSleeping = 1;
             }
-            pthread_cond_wait(&shop.clientReady, &shop.mutex);
         }
 
-        if (barberSleeping)
+        sem_wait(&shop.clientReady);
+        sem_wait(&shop.accessSeats);
+
+        if (barberSleeping && infoMode)
         {
             printf("Fryzjer się budzi.\n");
             barberSleeping = 0;
         }
-        int clientID = shop.waitingRoom[--shop.nextSeat];
-        pthread_cond_signal(&shop.barberReady);
         pthread_mutex_unlock(&shop.mutex);
+
+        int clientID = shop.waitingRoom[--shop.nextSeat];
+        sem_post(&shop.barberReady);
+        sem_post(&shop.accessSeats); // Release the mutex
 
         pthread_mutex_lock(&shop.mutex);
         printf("Fryzjer obsługuje klienta %d\n", clientID);
         pthread_mutex_unlock(&shop.mutex);
 
-        usleep(HAIRCUT_TIME * 1000000); // Haircut time
+        usleep(HAIRCUT_TIME); // Haircut time
     }
     return NULL;
 }
