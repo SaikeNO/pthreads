@@ -48,10 +48,7 @@ void initializeBarberShop(BarberShop *shop, int capacity)
 
 void cleanupBarberShop(BarberShop *shop)
 {
-	if (pthread_mutex_destroy(&shop->mutex) != 0)
-	{
-		perror("Niszczenie mutexa nie powiodło się");
-	}
+	pthread_mutex_destroy(&shop->mutex);
 	if (pthread_cond_destroy(&shop->barberReady) != 0)
 	{
 		perror("Niszczenie zmiennej warunkowej barberReady nie powiodło się");
