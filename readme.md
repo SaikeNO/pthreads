@@ -30,7 +30,10 @@ Aby skompilować i uruchomić dowolną wersję projektu, wykonaj następujące k
 ```sh
 make
 ```
-
+#### Przykładowe użycie:
+```sh
+./exe <liczba_klientów> <liczba_miejsc> [-info]
+```
 #### Wersja z Semaforami i Mutexami:
 ```sh
 ./sem_only/exe 10 5 -info
