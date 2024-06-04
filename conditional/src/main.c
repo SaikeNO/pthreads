@@ -6,7 +6,7 @@
 #include <string.h>
 #include "../headers/queue.h"
 
-#define HAIRCUT_TIME 3 * 1000000 // 3 sekundy
+#define HAIRCUT_TIME 3 // 3 sekundy
 
 typedef struct
 {
@@ -64,7 +64,7 @@ void cleanupBarberShop(BarberShop *shop)
 void *client(void *arg)
 {
 	int id = *(int *)arg;
-	usleep(rand() % (HAIRCUT_TIME * 3)); // Losowy czas przybycia
+	sleep(rand() % (HAIRCUT_TIME * 3)); // Losowy czas przybycia
 
 	if (pthread_mutex_lock(&shop.mutex) != 0)
 	{
@@ -115,7 +115,7 @@ void *client(void *arg)
 			pthread_exit(NULL);
 		}
 
-		usleep(HAIRCUT_TIME); // Czas strzyżenia
+		sleep(HAIRCUT_TIME); // Czas strzyżenia
 	}
 	else
 	{
@@ -164,29 +164,14 @@ void *barber(void *arg)
 			barberSleeping = 0;
 		}
 		int clientID = dequeue(&queue);
-		if (clientID == -1)
-		{
-			perror("Błąd przy zdejmowaniu klienta z kolejki");
-			pthread_mutex_unlock(&shop.mutex);
-			pthread_exit(NULL);
-		}
+
 		if (pthread_cond_signal(&shop.barberReady) != 0)
 		{
 			perror("Błąd przy wysyłaniu sygnału barberReady");
 			pthread_mutex_unlock(&shop.mutex);
 			pthread_exit(NULL);
 		}
-		if (pthread_mutex_unlock(&shop.mutex) != 0)
-		{
-			perror("Błąd przy odblokowywaniu mutexa");
-			pthread_exit(NULL);
-		}
 
-		if (pthread_mutex_lock(&shop.mutex) != 0)
-		{
-			perror("Błąd przy blokowaniu mutexa");
-			pthread_exit(NULL);
-		}
 		printf("Fryzjer obsługuje klienta %d\n", clientID);
 		if (pthread_mutex_unlock(&shop.mutex) != 0)
 		{
@@ -194,7 +179,7 @@ void *barber(void *arg)
 			pthread_exit(NULL);
 		}
 
-		usleep(HAIRCUT_TIME); // Czas strzyżenia
+		sleep(HAIRCUT_TIME); // Czas strzyżenia
 	}
 	return NULL;
 }

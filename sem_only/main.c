@@ -6,7 +6,7 @@
 #include <time.h>
 #include <string.h>
 
-#define HAIRCUT_TIME 3 * 1000000 // 3 sekundy
+#define HAIRCUT_TIME 3 // 3 sekundy
 
 typedef struct
 {
@@ -81,7 +81,7 @@ void cleanupBarberShop(BarberShop *shop)
 void *client(void *arg)
 {
 	int id = *(int *)arg;
-	usleep(rand() % (HAIRCUT_TIME * 3)); // Losowy czas przybycia
+	sleep(rand() % (HAIRCUT_TIME * 3)); // Losowy czas przybycia
 
 	if (sem_wait(&shop.accessSeats) != 0)
 	{
@@ -124,7 +124,7 @@ void *client(void *arg)
 			pthread_exit(NULL);
 		}
 
-		usleep(HAIRCUT_TIME); // Czas strzyżenia
+		sleep(HAIRCUT_TIME); // Czas strzyżenia
 	}
 	else
 	{
@@ -207,7 +207,7 @@ void *barber(void *arg)
 			pthread_exit(NULL);
 		}
 
-		usleep(HAIRCUT_TIME); // Czas strzyżenia
+		sleep(HAIRCUT_TIME); // Czas strzyżenia
 	}
 	return NULL;
 }
