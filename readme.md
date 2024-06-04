@@ -2,8 +2,15 @@
 
 ## Opis Projektu
 Projekt implementuje klasyczny problem synchronizacji znany jako "Problem Śpiącego Barbera" w dwóch wersjach:
-1. Wersja z wykorzystaniem semaforów i mutexów.
-2. Wersja z wykorzystaniem zmiennych warunkowych oraz kolejki.
+
+### Wersja z semaforami i mutexami (`sem_only`)
+
+Ta wersja problemu śpiącego barbera używa semaforów do zarządzania dostępem do zasobów oraz mutexów do zapewnienia wzajemnego wykluczania.
+
+### Wersja ze zmiennymi warunkowymi i kolejką (`conditional`)
+
+Ta wersja problemu śpiącego barbera używa zmiennych warunkowych oraz kolejki do synchronizacji procesów i zarządzania kolejnością klientów.
+
 
 ## Struktura Projektu
 - `sem_only/`: Wersja implementacji z użyciem semaforów i mutexów.
